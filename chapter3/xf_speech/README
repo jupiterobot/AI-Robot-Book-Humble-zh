@@ -1,0 +1,59 @@
+# xf_speech — 讯飞语音 ROS2 节点
+
+本包基于 **讯飞开放平台** 的 WebAPI，实现了 **语音合成（TTS）** 和 **语音识别（ASR）** 功能，适用于 ROS2 Humble 环境下的中文人机交互场景。
+
+> 适用于《AI机器人开发实战（ROS2 Humble 中文版）》配套代码
+
+---
+
+## 功能特性
+
+-  **语音合成（TTS）**：将文本转为自然流畅的中文语音（支持多种发音人）
+-  **语音识别（ASR）**：将麦克风或音频文件中的语音转为文字
+-  支持 **WebSocket 实时通信**
+-  兼容 **ROS2 Humble (Ubuntu 22.04)**
+-  提供 **Python 节点接口**
+
+---
+
+## 依赖安装
+
+### 1. Python 依赖
+pip3 install websocket-client
+pip3 install pydub
+sudo apt update && sudo apt install -y sox libsox-fmt-mp3
+
+
+2. 讯飞 API 密钥
+注册 讯飞开放平台
+https://console.xfyun.cn/services/iat
+创建应用，获取：
+APPID
+APISecret
+APIKey
+
+将密钥填入配置文件：config/xf_config.py
+
+
+快速开始
+启动语音合成节点
+
+ros2 run xf_speech tts_node --ros-args -p text:="你好，我是机器人"
+启动语音识别节点（需麦克风）
+
+ros2 run xf_speech asr_node
+查看话题
+
+ros2 topic echo /tts/audio    # 合成的音频数据
+ros2 topic echo /asr/text     # 识别出的文字
+
+
+目录结构
+xf_speech/
+├── launch/              # 启动文件
+├── config/              # 配置文件（含密钥模板）
+├── scripts/             # 核心 Python 脚本
+│   ├── tts_client.py    # 语音合成客户端
+│   └── asr_client.py    # 语音识别客户端
+├── package.xml          # 包描述
+└── setup.py             # 安装脚本

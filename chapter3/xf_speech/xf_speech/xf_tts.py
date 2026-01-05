@@ -16,6 +16,12 @@ import _thread as thread
 import os
 from pydub import AudioSegment
 import time
+from pathlib import Path
+import sys
+
+pkg_path = str(Path(__file__).resolve().parents[1]) # 获取pkg路径
+sys.path.insert(0, pkg_path + "/config") # 获取pkg/config路径
+import xf_config
 
 STATUS_FIRST_FRAME = 0  # 第一帧的标识
 STATUS_CONTINUE_FRAME = 1  # 中间帧标识
@@ -148,8 +154,8 @@ def tts_fun(string_txr):
         thread.start_new_thread(run, ())
     # 测试时候在此处正确填写相关信息即可运行
     # 这里改成自己的key ,每一个人的用额都是有限的。https://console.xfyun.cn/services/iat
-    wsParam = Ws_Param(APPID='', APISecret='',
-                       APIKey='',
+    wsParam = Ws_Param(APPID=xf_config.APPID, APIKey=xf_config.API_KEY,
+                       APISecret=xf_config.API_SECRET,
                        Text=string_txr)
     
     websocket.enableTrace(False)

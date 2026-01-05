@@ -15,6 +15,8 @@ from wsgiref.handlers import format_date_time
 from datetime import datetime
 from time import mktime
 import _thread as thread
+from pathlib import Path
+import sys
 
 STATUS_FIRST_FRAME = 0  # 第一帧的标识
 STATUS_CONTINUE_FRAME = 1  # 中间帧标识
@@ -22,6 +24,10 @@ STATUS_LAST_FRAME = 2  # 最后一帧的标识
 
 
 RESULT= "" # 返回结果的全局变量
+
+pkg_path = str(Path(__file__).resolve().parents[1]) # 获取pkg路径
+sys.path.insert(0, pkg_path + "/config") # 获取pkg/config路径
+import xf_config
 
 class Ws_Param(object):
     # 初始化
@@ -210,8 +216,8 @@ def stt_fun(input_t):
     record(input_t)
     time1 = datetime.now()
     # 这里改成自己的key秘钥， 每个人每天只有500的访问量。
-    wsParam = Ws_Param(APPID='', APIKey='',
-                       APISecret='',
+    wsParam = Ws_Param(APPID=xf_config.APPID, APIKey=xf_config.API_KEY,
+                       APISecret=xf_config.API_SECRET,
                        AudioFile=r'./output.pcm')
     websocket.enableTrace(False)
     wsUrl = wsParam.create_url()
