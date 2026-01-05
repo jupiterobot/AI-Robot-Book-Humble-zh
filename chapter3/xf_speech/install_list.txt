@@ -1,3 +1,0 @@
-pip3 install websocket-client
-pip3 install pydub
-sudo apt update && sudo apt install -y sox libsox-fmt-mp3
