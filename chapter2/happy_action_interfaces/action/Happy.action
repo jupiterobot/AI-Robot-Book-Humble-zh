@@ -1,0 +1,5 @@
+int32 action_no       # 请求
+---
+string happy_result   # 响应
+---
+int32 remaining_time  # 反馈
