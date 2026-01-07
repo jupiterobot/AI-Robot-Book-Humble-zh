@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<behavior name="Sample Behavior">
+
+    <executable package_path="sample_sm_flexbe_behaviors.sample_behavior_sm" class="SampleBehaviorSM" />
+    <tagstring>sample</tagstring>
+    <author>Keith Valentin</author>
+    <date>Tue May 28 2024</date>
+    <description>
+        用于理解FlexBE基础的状态机示例
+    </description>
+
+
+    <!-- Contained Behaviors -->
+
+    <!-- Available Parameters -->
+    <params>
+
+        <param type="numeric" name="max_eat" default="5" label="max_eat" hint="Sets the max_eat">
+            <min value="1" />
+            <max value="10" />
+        </param>
+
+    </params>
+
+
+</behavior>

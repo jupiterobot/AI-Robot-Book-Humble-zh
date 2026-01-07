@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<behavior name="Bringme Action Behavior">
+
+    <executable package_path="bringme_sm_flexbe_behaviors.bringme_action_behavior_sm" class="BringmeActionBehaviorSM" />
+    <tagstring>action</tagstring>
+    <author>Keith Valentin</author>
+    <date>May 28, 2024</date>
+    <description>
+        Bringme任务状态机的一个示例
+    </description>
+
+
+    <!-- Contained Behaviors -->
+
+    <!-- Available Parameters -->
+    <params>
+
+        <param type="text" name="listen_time" default="10" label="listen_time" hint="Sets the listen_time" />
+
+    </params>
+
+
+</behavior>
