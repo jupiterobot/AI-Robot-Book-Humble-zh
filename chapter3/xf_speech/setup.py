@@ -20,8 +20,13 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'tts_subscribe = xf_speech.tts_subscribe:main',
-            'iat_publish = xf_speech.iat_publish:main',
+            'xf_topic_tts = xf_speech.xf_topic_tts:main',
+            'xf_topic_iat = xf_speech.xf_topic_iat:main',
+            'xf_recognition_server = xf_speech.xf_recognition_server:main',
+            'xf_recognition_client = xf_speech.xf_recognition_client:main',
+            'xf_synthesis_server = xf_speech.xf_synthesis_server:main',
+            'xf_synthesis_client = xf_speech.xf_synthesis_client:main',
+            'xf_speech_client = xf_speech.xf_speech_client:main',
         ],
     },
 )

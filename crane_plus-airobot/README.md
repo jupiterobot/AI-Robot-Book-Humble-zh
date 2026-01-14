@@ -1,4 +1,4 @@
-# crane_plus for AI Robot Book（讲谈社，日文版）
+# crane_plus for AI Robot Book（讲谈社，中文版）
 
 本书使用的末端执行器（endtip）模型已做修改。
 

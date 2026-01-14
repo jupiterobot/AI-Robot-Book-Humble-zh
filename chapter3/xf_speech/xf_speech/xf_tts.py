@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 import websocket
 import datetime
@@ -14,164 +14,210 @@ from datetime import datetime
 from time import mktime
 import _thread as thread
 import os
-from pydub import AudioSegment
-import time
-from pathlib import Path
 import sys
+import threading
+import pyaudio
+from pathlib import Path
 
-pkg_path = str(Path(__file__).resolve().parents[1]) # 获取pkg路径
-sys.path.insert(0, pkg_path + "/config") # 获取pkg/config路径
+# --- 保留你原有的 config 导入方式 ---
+pkg_path = str(Path(__file__).resolve().parents[1])
+sys.path.insert(0, pkg_path + "/config")
 import xf_config
 
-STATUS_FIRST_FRAME = 0  # 第一帧的标识
-STATUS_CONTINUE_FRAME = 1  # 中间帧标识
-STATUS_LAST_FRAME = 2  # 最后一帧的标识
+STATUS_FIRST_FRAME = 0
+STATUS_CONTINUE_FRAME = 1
+STATUS_LAST_FRAME = 2
 
 
 class Ws_Param(object):
-    # 初始化
     def __init__(self, APPID, APIKey, APISecret, Text):
         self.APPID = APPID
         self.APIKey = APIKey
         self.APISecret = APISecret
         self.Text = Text
-
-        # 公共参数(common)
         self.CommonArgs = {"app_id": self.APPID}
-        # 业务参数(business)，更多个性化参数可在官网查看
         self.BusinessArgs = {"aue": "raw", "auf": "audio/L16;rate=16000", "vcn": "xiaoyan", "tte": "utf8"}
-        self.Data = {"status": 2, "text": str(base64.b64encode(self.Text.encode('utf-8')), "UTF8")}
+        self.Data = {"status": STATUS_FIRST_FRAME, "text": str(base64.b64encode(self.Text.encode('utf-8')), "UTF8")}
 
-
-    # 生成url
     def create_url(self):
         url = 'wss://tts-api.xfyun.cn/v2/tts'
-        # 生成RFC1123格式的时间戳
         now = datetime.now()
         date = format_date_time(mktime(now.timetuple()))
-
-        # 拼接字符串
-        signature_origin = "host: " + "ws-api.xfyun.cn" + "\n"
-        signature_origin += "date: " + date + "\n"
-        signature_origin += "GET " + "/v2/tts " + "HTTP/1.1"
-        # 进行hmac-sha256进行加密
-        signature_sha = hmac.new(self.APISecret.encode('utf-8'), signature_origin.encode('utf-8'),
-                                 digestmod=hashlib.sha256).digest()
-        signature_sha = base64.b64encode(signature_sha).decode(encoding='utf-8')
-
-        authorization_origin = "api_key=\"%s\", algorithm=\"%s\", headers=\"%s\", signature=\"%s\"" % (
-            self.APIKey, "hmac-sha256", "host date request-line", signature_sha)
-        authorization = base64.b64encode(authorization_origin.encode('utf-8')).decode(encoding='utf-8')
-        # 将请求的鉴权参数组合为字典
+        signature_origin = "host: ws-api.xfyun.cn\ndate: {}\nGET /v2/tts HTTP/1.1".format(date)
+        signature_sha = hmac.new(
+            self.APISecret.encode('utf-8'),
+            signature_origin.encode('utf-8'),
+            digestmod=hashlib.sha256
+        ).digest()
+        signature_sha = base64.b64encode(signature_sha).decode('utf-8')
+        authorization_origin = 'api_key="{}", algorithm="hmac-sha256", headers="host date request-line", signature="{}"'.format(
+            self.APIKey, signature_sha
+        )
+        authorization = base64.b64encode(authorization_origin.encode('utf-8')).decode('utf-8')
         v = {
             "authorization": authorization,
             "date": date,
             "host": "ws-api.xfyun.cn"
         }
-        # 拼接鉴权参数，生成url
-        url = url + '?' + urlencode(v)
-        # print("date: ",date)
-        # print("v: ",v)
-        # 此处打印出建立连接时候的url,参考本demo的时候可取消上方打印的注释，比对相同参数时生成的url与自己代码生成的url是否一致
-        # print('websocket url :', url)
-        return url
+        return url + '?' + urlencode(v)
 
-def on_message(ws, message):
-    try:
-        message =json.loads(message)
-        code = message["code"]
-        sid = message["sid"]
-        audio = message["data"]["audio"]
-        audio = base64.b64decode(audio)
-        status = message["data"]["status"]
-        # print(message)
-        if status == 2:
-            # print("ws is closed")
+
+# ===== 新增：全局播放控制 =====
+class TTSPlayer:
+    def __init__(self, stop_event=None):
+        self.stop_event = stop_event or threading.Event()
+        self.audio_buffer = []
+        self.buffer_lock = threading.Lock()
+        self.finished = threading.Event()
+        self.p = pyaudio.PyAudio()
+        self.stream = None
+        self.error = None
+
+    def start_playback(self):
+        """启动播放线程"""
+        def play():
+            try:
+                self.stream = self.p.open(
+                    format=pyaudio.paInt16,
+                    channels=1,
+                    rate=16000,
+                    output=True,
+                    frames_per_buffer=1024
+                )
+                while not self.stop_event.is_set():
+                    with self.buffer_lock:
+                        if self.audio_buffer:
+                            chunk = self.audio_buffer.pop(0)
+                            self.stream.write(chunk)
+                        else:
+                            if self.finished.is_set() and not self.audio_buffer:
+                                break
+                            time.sleep(0.01)
+                    if self.stop_event.is_set():
+                        break
+            except Exception as e:
+                self.error = str(e)
+            finally:
+                if self.stream:
+                    self.stream.stop_stream()
+                    self.stream.close()
+                self.p.terminate()
+
+        threading.Thread(target=play, daemon=True).start()
+
+    def feed_audio(self, audio_data):
+        with self.buffer_lock:
+            self.audio_buffer.append(audio_data)
+
+    def finish(self):
+        self.finished.set()
+
+    def is_error(self):
+        return self.error is not None
+
+    def get_error(self):
+        return self.error
+
+
+# ===== 修改 on_message：不再写文件，而是喂给播放器 =====
+def make_on_message(player):
+    def on_message(ws, message):
+        try:
+            msg = json.loads(message)
+            code = msg["code"]
+            if code != 0:
+                print("讯飞TTS错误:", msg.get("message", ""), "code:", code)
+                ws.close()
+                return
+
+            audio_b64 = msg["data"]["audio"]
+            audio = base64.b64decode(audio_b64)
+            player.feed_audio(audio)
+
+            status = msg["data"]["status"]
+            if status == STATUS_LAST_FRAME:
+                player.finish()
+                ws.close()
+        except Exception as e:
+            print("解析音频帧失败:", e)
             ws.close()
-        if code != 0:
-            errMsg = message["message"]
-            print("sid:%s call error:%s code is:%s" % (sid, errMsg, code))
-        else:
-
-            with open('./demo.pcm', 'ab') as f:
-                f.write(audio)
-
-    except Exception as e:
-        print("receive msg,but parse exception:", e)
+    return on_message
 
 
+def tts_fun(string_txt, stop_event=None):
+    # 初始化播放器
+    player = TTSPlayer(stop_event=stop_event)
+    player.start_playback()
 
-# 收到websocket错误的处理
-def on_error(ws, error):
-    print("### error:", error)
-
-
-# 收到websocket关闭的处理
-def on_close(ws,arg1,arg2):
-    # print("### closed ###")
-    pass
-
-def play_fun():
-    # 加载PCM音频文件
-    audio = AudioSegment.from_file("demo.pcm", format="raw", sample_width=2, frame_rate=16000, channels=1)
-
-    # 将音频转换为MP3格式并播放
-    audio.export("tts_sample.mp3", format="mp3")
-
-    time.sleep(1)
-    # # 初始化pygame
-    # pygame.mixer.init()
-
-    # # 加载MP3文件
-    # pygame.mixer.music.load("file.mp3")
-
-    # # 播放MP3文件
-    # pygame.mixer.music.play()
-
-    # # 等待音频播放完毕
-    # while pygame.mixer.music.get_busy():
-    #     pygame.time.Clock().tick(10)
-    # print("------ 播放完毕 ------")
-    file = "tts_sample.mp3"
-    os.system('play '+ file)
-    os.remove('demo.pcm')
-
-
-def tts_fun(string_txr):
-    # 收到websocket连接建立的处理
     def on_open(ws):
-        def run(*args):
-            d = {"common": wsParam.CommonArgs,
+        def run():
+            wsParam = Ws_Param(
+                APPID=xf_config.APPID,
+                APIKey=xf_config.API_KEY,
+                APISecret=xf_config.API_SECRET,
+                Text=string_txt
+            )
+            d = {
+                "common": wsParam.CommonArgs,
                 "business": wsParam.BusinessArgs,
                 "data": wsParam.Data,
-                }
-            d = json.dumps(d)
-            print("------开始发送文本数据------")
-            ws.send(d)
-            if os.path.exists('./demo.pcm'):
-                os.remove('./demo.pcm')
-
+            }
+            ws.send(json.dumps(d))
         thread.start_new_thread(run, ())
-    # 测试时候在此处正确填写相关信息即可运行
-    # 这里改成自己的key ,每一个人的用额都是有限的。https://console.xfyun.cn/services/iat
-    wsParam = Ws_Param(APPID=xf_config.APPID, APIKey=xf_config.API_KEY,
-                       APISecret=xf_config.API_SECRET,
-                       Text=string_txr)
-    
+
+    # 创建 WebSocket
+    wsParam = Ws_Param(xf_config.APPID, xf_config.API_KEY, xf_config.API_SECRET, string_txt)
     websocket.enableTrace(False)
     wsUrl = wsParam.create_url()
-    ws = websocket.WebSocketApp(wsUrl, on_message=on_message, on_error=on_error, on_close=on_close)
+
+    ws = websocket.WebSocketApp(
+        wsUrl,
+        on_message=make_on_message(player),
+        on_error=lambda ws, err: print("WebSocket error:", err),
+        on_close=lambda ws, a, b: None
+    )
     ws.on_open = on_open
+
+    # 启动连接（会阻塞直到合成结束或出错）
     ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
 
-def tts_main(input_txt):
-    tts_fun(input_txt)
-    play_fun()
+    # 等待播放完成（最多等3秒，避免卡死）
+    if not player.is_error():
+        for _ in range(30):  # 最多等3秒
+            if player.finished.is_set() and not player.audio_buffer:
+                break
+            if stop_event and stop_event.is_set():
+                break
+            time.sleep(0.1)
 
-class tts_clss():
-    def __init__(self, input_txt):
-        tts_fun(input_txt)
-        play_fun()
+    if player.is_error():
+        raise RuntimeError("播放出错: " + player.get_error())
+
+
+def tts_main(input_txt, stop_event=None):
+    """
+    主入口函数，支持传入 stop_event 实现中断
+    :param input_txt: 要合成的文本
+    :param stop_event: threading.Event，设为 set() 可中断播放
+    """
+    tts_fun(input_txt, stop_event=stop_event)
+
+
+# 兼容旧接口（可选）
+class tts_clss:
+    def __init__(self, input_txt, stop_event=None):
+        tts_main(input_txt, stop_event)
+
 
 if __name__ == "__main__":
-    tts_main("你好")
+    # 示例：5秒后自动中断
+    stop_evt = threading.Event()
+    t = threading.Thread(target=tts_main, args=("你好，这是一段很长的测试语音，你可以试试在中途按 Ctrl+C 中断它。", stop_evt))
+    t.start()
+    try:
+        time.sleep(5)
+        print(">>> 发送中断信号 <<<")
+        stop_evt.set()
+    except KeyboardInterrupt:
+        stop_evt.set()
+    t.join()
